@@ -28,24 +28,17 @@ namespace GitHubMetricsLoader
         [FunctionName("LoadRepoMetrics")]
         public async Task Run(
             [TimerTrigger("0 0 6 * * *")] TimerInfo time,
-            [Blob(LoaderConfigBlobPath, FileAccess.Read, Connection = Env_StorageConnectionString)] string loaderConfigText,
+            [Blob(LoaderConfigBlobPath, FileAccess.Read, Connection = Env_StorageConnectionString)] string loaderConfigContents,
             ILogger log)
         {
             try
             {
-                var loaderConfig = JsonSerializer.Deserialize<List<LoaderRepoConfig>>(loaderConfigText);
+                var loaderConfig = JsonSerializer.Deserialize<List<LoaderRepoConfig>>(loaderConfigContents);
 
                 if (loaderConfig.Any())
                 {
-                    var pat = GetEnvironmentVariable(Env_GitHubPat)
-                        ?? throw new InvalidOperationException($"[{Env_GitHubPat}] environment variable not configured.");
-
-                    var storageConnString = GetEnvironmentVariable(Env_StorageConnectionString)
-                        ?? throw new InvalidOperationException($"[{Env_StorageConnectionString}] environment variable not configured.");
-
-                    var blobServiceClient = new BlobServiceClient(storageConnString);
-                    var blobContainerClient = blobServiceClient.GetBlobContainerClient(MetricsBlobContainerName);
-                    var gitHubApiClient = CreateGitHubHttpClient(pat);
+                    var blobContainerClient = CreateMetricsBlobContainerClient();
+                    var gitHubApiClient = CreateGitHubHttpClient();
 
                     log.LogInformation($"Loading metrics for [{loaderConfig.Count}] repo(s)...");
 
@@ -139,6 +132,22 @@ namespace GitHubMetricsLoader
             }
         }
 
+        private string GetGitHubPat() =>
+            GetEnvironmentVariable(Env_GitHubPat)
+            ?? throw new InvalidOperationException($"[{Env_GitHubPat}] environment variable not configured.");
+
+        private string GetStorageConnectionString() =>
+            GetEnvironmentVariable(Env_StorageConnectionString)
+            ?? throw new InvalidOperationException($"[{Env_StorageConnectionString}] environment variable not configured.");
+
+        private BlobContainerClient CreateMetricsBlobContainerClient()
+        {
+            var storageConnString = GetStorageConnectionString();
+            var blobServiceClient = new BlobServiceClient(storageConnString);
+
+            return blobServiceClient.GetBlobContainerClient(MetricsBlobContainerName);
+        }
+
         private string CreateCsvHeaderRow() =>
             @"""Date"",""Total clones"",""Total unique clones""";
 
@@ -177,8 +186,9 @@ namespace GitHubMetricsLoader
             return apiResponse.RepoMetrics;
         }
 
-        private HttpClient CreateGitHubHttpClient(string pat)
+        private HttpClient CreateGitHubHttpClient()
         {
+            var pat = GetGitHubPat();
             var httpClient = new HttpClient { BaseAddress = new Uri("https://api.github.com") };
 
             httpClient.DefaultRequestHeaders.Clear();
