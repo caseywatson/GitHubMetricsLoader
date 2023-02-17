@@ -3,9 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace GitHubMetricsLoader.Models
 {
-    public class RepoMetricsApiResponse
+    public class RepoTrafficMetricsApiResponse
     {
         [JsonPropertyName("clones")]
-        public List<DailyTrafficMetrics> RepoMetrics { get; set;} = new List<DailyTrafficMetrics>();
+        public List<RepoTrafficMetrics> RepoMetrics { get; set;} = new List<RepoTrafficMetrics>();
     }
 }

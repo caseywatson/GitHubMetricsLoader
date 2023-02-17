@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace GitHubMetricsLoader.Models
 {
-    public class DailyRepoMetrics
+    public class RepoTrafficMetrics
     {
         [JsonPropertyName("timestamp")]
         public DateTime Date { get; set; }

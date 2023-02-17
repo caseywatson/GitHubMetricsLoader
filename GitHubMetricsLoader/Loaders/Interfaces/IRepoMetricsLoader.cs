@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using GitHubMetricsLoader.Models.Configuration;
 using System.Threading.Tasks;
 
 namespace GitHubMetricsLoader.Loaders.Interfaces
 {
-    internal class IMetricsLoader
+    public interface IRepoMetricsLoader
     {
+        Task LoadRepoMetrics(RepoConfiguration repoConfig);
     }
 }

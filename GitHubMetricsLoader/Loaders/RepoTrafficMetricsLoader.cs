@@ -3,11 +3,11 @@ using GitHubMetricsLoader.Loaders.Interfaces;
 using GitHubMetricsLoader.Models;
 using GitHubMetricsLoader.Models.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.WindowsAzure.Storage.Blob;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -15,6 +15,8 @@ namespace GitHubMetricsLoader.Loaders
 {
     public class RepoTrafficMetricsLoader : IRepoMetricsLoader
     {
+        public const string MetricsBlobWatermarkDatePropertyName = "watermark_date";
+
         private readonly ILogger log;
         private readonly HttpClient gitHubApiClient;
         private readonly BlobContainerClient metricsContainerClient;
@@ -34,25 +36,82 @@ namespace GitHubMetricsLoader.Loaders
         {
             ArgumentNullException.ThrowIfNull(repoConfig, nameof(repoConfig));
 
-            var repoMetrics = await GetMetricsFromGitHub(repoConfig);
+            var metrics = await GetMetricsFromGitHub(repoConfig);
 
-            if (repoMetrics.Any())
+            if (metrics.Any())
             {
-                if (await metricsContainerClient.ExistsAsync())
-                {
+                var metricsBlobClient = GetMetricsBlobClient(repoConfig);
 
+                if (await metricsBlobClient.ExistsAsync())
+                {
+                    await UpdateMetricsBlob(metrics, metricsBlobClient);
                 }
                 else
                 {
-
+                    await CreateMetricsBlob(metrics, metricsBlobClient);
                 }
             }
             else
             {
                 log.LogWarning($"Repo [{repoConfig}] not currently available.");
             }
+        }
 
-            throw new NotImplementedException();
+        private async Task CreateMetricsBlob(List<RepoTrafficMetrics> metrics, BlobClient metricsBlobClient)
+        {
+            var contentBuilder = new StringBuilder(CreateCsvHeaderRow());
+
+            AppendMetricsToCsvContent(contentBuilder, metrics);
+
+            await UploadBlobContent(metricsBlobClient, contentBuilder.ToString(), metrics.Max(m => m.Date));
+        }
+
+        private async Task UpdateMetricsBlob(List<RepoTrafficMetrics> metrics, BlobClient metricsBlobClient)
+        {
+            var watermarkDate = await TryGetMetricsBlobWatermarkDate(metricsBlobClient);
+
+            if (watermarkDate != null)
+            {
+                metrics = metrics.Where(m => m.Date > watermarkDate).ToList();
+            }
+
+            var content = await DownloadBlobContent(metricsBlobClient);
+            var contentBuilder = new StringBuilder(content);
+
+            AppendMetricsToCsvContent(contentBuilder, metrics);
+
+            await UploadBlobContent(metricsBlobClient, contentBuilder.ToString(), metrics.Max(m => m.Date));
+        }
+
+        private async Task<string> DownloadBlobContent(BlobClient metricsBlobClient)
+        {
+            var contentReponse = await metricsBlobClient.DownloadContentAsync();
+            var contentBytes = contentReponse.Value.Content.ToArray();
+            var content = Encoding.UTF8.GetString(contentBytes);
+
+            return content;
+        }
+
+        private async Task UploadBlobContent(BlobClient metricsBlobClient, string content, DateTime watermarkDate)
+        {
+            var contentBytes = Encoding.UTF8.GetBytes(content);
+
+            await metricsBlobClient.UploadAsync(new BinaryData(contentBytes), overwrite: true);
+            await metricsBlobClient.SetMetadataAsync(new Dictionary<string, string> { [MetricsBlobWatermarkDatePropertyName] = watermarkDate.ToString("s") });
+        }
+
+        private async Task<DateTime?> TryGetMetricsBlobWatermarkDate(BlobClient metricsBlobClient)
+        {
+            var blobProps = (await metricsBlobClient.GetPropertiesAsync()).Value;
+
+            if (blobProps.Metadata.ContainsKey(MetricsBlobWatermarkDatePropertyName))
+            {
+                return DateTime.Parse(blobProps.Metadata[MetricsBlobWatermarkDatePropertyName]);
+            }
+            else
+            {
+                return null;
+            }
         }
 
         private BlobClient GetMetricsBlobClient(RepoConfiguration repoConfig) =>
@@ -76,7 +135,15 @@ namespace GitHubMetricsLoader.Loaders
         private string CreateCsvHeaderRow() =>
             @"""Date"",""Total clones"",""Total unique clones""";
 
-        private string CreateCsvDataRow(RepoTrafficMetrics repoMetrics) =>
+        private string CreateCsvMetricRow(RepoTrafficMetrics repoMetrics) =>
             $@"""{repoMetrics.Date}"",{repoMetrics.TotalClones},{repoMetrics.UniqueClones}";
+
+        private void AppendMetricsToCsvContent(StringBuilder contentBuilder, List<RepoTrafficMetrics> metrics)
+        {
+            foreach (var metric in metrics)
+            {
+                contentBuilder.AppendLine(CreateCsvMetricRow(metric));
+            }
+        }
     }
 }
