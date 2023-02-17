@@ -6,6 +6,6 @@ namespace GitHubMetricsLoader.Models
     public class RepoMetricsApiResponse
     {
         [JsonPropertyName("clones")]
-        public List<DailyRepoMetrics> RepoMetrics { get; set;} = new List<DailyRepoMetrics>();
+        public List<DailyTrafficMetrics> RepoMetrics { get; set;} = new List<DailyTrafficMetrics>();
     }
 }

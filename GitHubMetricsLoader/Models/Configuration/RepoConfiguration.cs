@@ -1,8 +1,8 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace GitHubMetricsLoader.Models
+namespace GitHubMetricsLoader.Models.Configuration
 {
-    public class LoaderRepoConfig
+    public class RepoConfiguration
     {
         [JsonPropertyName("repo_owner_name")]
         public string RepoOwnerName { get; set; }
@@ -10,7 +10,6 @@ namespace GitHubMetricsLoader.Models
         [JsonPropertyName("repo_name")]
         public string RepoName { get; set; }
 
-        public override string ToString() =>
-            $"{RepoOwnerName}/{RepoName}";
+        public override string ToString() => $"{RepoOwnerName}/{RepoName}";
     }
 }
