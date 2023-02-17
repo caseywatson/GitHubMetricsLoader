@@ -20,11 +20,11 @@ namespace GitHubMetricsLoader
         private const string Env_GitHubPat = "GitHubPat";
         private const string Env_StorageConnectionString = "StorageConnectionString";
         private const string LoaderConfigBlobPath = "config/loader_config.json";
-        private const string MetricsBlobContainerName = "repo_metrics";
+        private const string MetricsBlobContainerName = "metrics";
 
         [FunctionName("LoadRepoMetrics")]
         public async Task Run(
-            [TimerTrigger("0 0 6 * * *")] TimerInfo time,
+            [TimerTrigger("0 0 6 * * *", RunOnStartup = true)] TimerInfo time,
             [Blob(LoaderConfigBlobPath, FileAccess.Read, Connection = Env_StorageConnectionString)] string loaderConfigContents,
             ILogger log)
         {

@@ -44,29 +44,42 @@ namespace GitHubMetricsLoader.Loaders
 
                 if (await metricsBlobClient.ExistsAsync())
                 {
-                    await UpdateMetricsBlob(metrics, metricsBlobClient);
+                    var watermarkDate = await UpdateMetricsBlob(metrics, metricsBlobClient);
+
+                    log.LogInformation(
+                        $"Repo [{repoConfig}] traffic metrics blob [{metricsBlobClient.Name}] successfully [updated]. " +
+                        $"Latest metric (watermark) date is [{watermarkDate}].");
                 }
                 else
                 {
-                    await CreateMetricsBlob(metrics, metricsBlobClient);
+                    var watermarkDate = await CreateMetricsBlob(metrics, metricsBlobClient);
+
+                    log.LogInformation(
+                        $"Repo [{repoConfig}] traffic metrics blob [{metricsBlobClient.Name}] successfully [created]. " +
+                        $"Latest metric (watermark) date is [{watermarkDate}].");
                 }
             }
             else
             {
-                log.LogWarning($"Repo [{repoConfig}] not currently available.");
+                log.LogWarning($"No repo [{repoConfig}] traffic metrics currently available.");
             }
         }
 
-        private async Task CreateMetricsBlob(List<RepoTrafficMetrics> metrics, BlobClient metricsBlobClient)
+        private async Task<DateTime> CreateMetricsBlob(List<RepoTrafficMetrics> metrics, BlobClient metricsBlobClient)
         {
-            var contentBuilder = new StringBuilder(CreateCsvHeaderRow());
+            var contentBuilder = new StringBuilder();
+            var watermarkDate = metrics.Max(m => m.Date);
+
+            contentBuilder.AppendLine(CreateCsvHeaderRow());
 
             AppendMetricsToCsvContent(contentBuilder, metrics);
 
-            await UploadBlobContent(metricsBlobClient, contentBuilder.ToString(), metrics.Max(m => m.Date));
+            await UploadBlobContent(metricsBlobClient, contentBuilder.ToString(), watermarkDate);
+
+            return watermarkDate;
         }
 
-        private async Task UpdateMetricsBlob(List<RepoTrafficMetrics> metrics, BlobClient metricsBlobClient)
+        private async Task<DateTime> UpdateMetricsBlob(List<RepoTrafficMetrics> metrics, BlobClient metricsBlobClient)
         {
             var watermarkDate = await TryGetMetricsBlobWatermarkDate(metricsBlobClient);
 
@@ -75,12 +88,16 @@ namespace GitHubMetricsLoader.Loaders
                 metrics = metrics.Where(m => m.Date > watermarkDate).ToList();
             }
 
+            watermarkDate = metrics.Max(m => m.Date);
+
             var content = await DownloadBlobContent(metricsBlobClient);
             var contentBuilder = new StringBuilder(content);
 
             AppendMetricsToCsvContent(contentBuilder, metrics);
 
-            await UploadBlobContent(metricsBlobClient, contentBuilder.ToString(), metrics.Max(m => m.Date));
+            await UploadBlobContent(metricsBlobClient, contentBuilder.ToString(), watermarkDate.Value);
+
+            return watermarkDate.Value;
         }
 
         private async Task<string> DownloadBlobContent(BlobClient metricsBlobClient)
